@@ -40,12 +40,16 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - PYTHONPATH=/app  
       - DATABASE_URL=postgresql://funduser:fundpass@postgres:5432/funddb
       - REDIS_URL=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4-turbo-preview}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       - UPLOAD_DIR=/app/uploads
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads

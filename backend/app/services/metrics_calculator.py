@@ -22,15 +22,18 @@ class MetricsCalculator:
         total_distributions = self.calculate_total_distributions(fund_id)
         dpi = self.calculate_dpi(fund_id)
         irr = self.calculate_irr(fund_id)
+        nav = self.calculate_nav(fund_id)
+        rvpi = self.calculate_rvpi(fund_id)
+        tvpi = self.calculate_tvpi(fund_id)        
         
         return {
             "pic": float(pic) if pic else 0,
             "total_distributions": float(total_distributions) if total_distributions else 0,
             "dpi": float(dpi) if dpi else 0,
             "irr": float(irr) if irr else 0,
-            "tvpi": None,  # To be implemented
-            "rvpi": None,  # To be implemented
-            "nav": None,   # To be implemented
+            "tvpi": float(nav) if nav else 0,
+            "rvpi": float(rvpi) if rvpi else 0,
+            "nav": float(tvpi) if tvpi else 0,
         }
     
     def calculate_pic(self, fund_id: int) -> Optional[Decimal]:
@@ -106,6 +109,65 @@ class MetricsCalculator:
         except Exception as e:
             print(f"Error calculating IRR: {e}")
             return None
+        
+    def calculate_nav(self, fund_id: int) -> Optional[float]:
+        """
+        Calculate NAV (Net Asset Value)
+        NAV represents the current unrealized value of fund investments.
+        For simplicity, we use any Adjustment entries tagged as 'NAV_ADJUSTMENT'.
+        """
+        try:
+            nav_value = self.db.query(func.sum(Adjustment.amount)).filter(
+                Adjustment.fund_id == fund_id,
+                Adjustment.adjustment_type == "NAV_ADJUSTMENT"
+            ).scalar() or Decimal(0)
+            
+            return float(nav_value)
+        except Exception as e:
+            print(f"Error calculating NAV: {e}")
+            return None
+
+
+    def calculate_rvpi(self, fund_id: int) -> Optional[float]:
+        """
+        Calculate RVPI (Residual Value to Paid-In)
+        RVPI = NAV / PIC
+        Shows the unrealized value remaining in the portfolio.
+        """
+        try:
+            nav = self.calculate_nav(fund_id)
+            pic = self.calculate_pic(fund_id)
+            
+            if not pic or pic == 0:
+                return 0.0
+            
+            rvpi = float(nav) / float(pic)
+            return round(rvpi, 4)
+        except Exception as e:
+            print(f"Error calculating RVPI: {e}")
+            return None
+
+
+    def calculate_tvpi(self, fund_id: int) -> Optional[float]:
+        """
+        Calculate TVPI (Total Value to Paid-In)
+        TVPI = (Distributions + NAV) / PIC
+        Combines realized and unrealized gains to show total fund performance.
+        """
+        try:
+            total_distributions = self.calculate_total_distributions(fund_id)
+            nav = self.calculate_nav(fund_id)
+            pic = self.calculate_pic(fund_id)
+
+            if not pic or pic == 0:
+                return 0.0
+            
+            tvpi = (float(total_distributions) + float(nav)) / float(pic)
+            return round(tvpi, 4)
+        except Exception as e:
+            print(f"Error calculating TVPI: {e}")
+            return None
+
     
     def _get_cash_flows(self, fund_id: int) -> list:
         """

@@ -71,7 +71,7 @@ async def upload_document(
         process_document_task,
         document.id,
         file_path,
-        fund_id or 1  # Default fund_id if not provided
+        fund_id or 1
     )
     
     return DocumentUploadResponse(
@@ -83,32 +83,41 @@ async def upload_document(
 
 
 async def process_document_task(document_id: int, file_path: str, fund_id: int):
-    """Background task to process document"""
     from app.db.session import SessionLocal
-    
+    from app.models.document import Document
+    from app.services.document_processor import DocumentProcessor
+
     db = SessionLocal()
-    
+
     try:
-        # Update status to processing
         document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise ValueError(f"Document with ID {document_id} not found")
+
         document.parsing_status = "processing"
         db.commit()
+
+        def dummy_embedding(text: str):
+            return [0.0] * 384
         
-        # Process document
-        processor = DocumentProcessor()
+        processor = DocumentProcessor(db=db, embedding_func=dummy_embedding)
+
         result = await processor.process_document(file_path, document_id, fund_id)
+        if result.get("status") == "success":
+            document.parsing_status = "completed"
+        else:
+            document.parsing_status = "failed"
+            document.error_message = result.get("error", "Unknown error")
         
-        # Update status
-        document.parsing_status = result["status"]
-        if result["status"] == "failed":
-            document.error_message = result.get("error")
         db.commit()
-        
+
     except Exception as e:
         document = db.query(Document).filter(Document.id == document_id).first()
-        document.parsing_status = "failed"
-        document.error_message = str(e)
-        db.commit()
+        if document:
+            document.parsing_status = "failed"
+            document.error_message = str(e)
+            db.commit()
+
     finally:
         db.close()
 

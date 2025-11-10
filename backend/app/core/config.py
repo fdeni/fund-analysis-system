@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     TOP_K_RESULTS: int = 5
     SIMILARITY_THRESHOLD: float = 0.7
     
+    # Ollama LLM
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_MODEL: str = "llama3.2"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

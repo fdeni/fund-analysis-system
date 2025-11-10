@@ -30,7 +30,7 @@ anthropic==0.8.1
 # No additional packages needed - pgvector is a PostgreSQL extension
 
 # Embeddings
-sentence-transformers==2.2.2
+sentence-transformers==5.1.2
 
 # Task Queue
 celery==5.3.4

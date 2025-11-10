@@ -22,16 +22,11 @@ class QueryEngine:
         self.llm = self._initialize_llm()
     
     def _initialize_llm(self):
-        """Initialize LLM"""
-        if settings.OPENAI_API_KEY:
-            return ChatOpenAI(
-                model=settings.OPENAI_MODEL,
-                temperature=0,
-                openai_api_key=settings.OPENAI_API_KEY
-            )
-        else:
-            # Fallback to local LLM
-            return Ollama(model="llama2")
+        return Ollama(
+            base_url=settings.OLLAMA_BASE_URL or "http://localhost:11434",
+            model=settings.OLLAMA_MODEL or "llama3.2",
+            temperature=0
+        )
     
     async def process_query(
         self, 
