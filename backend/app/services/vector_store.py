@@ -14,16 +14,20 @@ class VectorStore:
     """Vector store using pgvector and HuggingFace embeddings"""
     
     def __init__(self, db: Session = None):
+        # Use provided DB session or create a new one
         self.db = db or SessionLocal()
+        # Use lightweight MiniLM embedding model (384 dimensions)
         self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self._ensure_extension()
     
     def _ensure_extension(self):
         """Enable pgvector extension and create table if needed"""
         try:
+            # Enable pgvector extension
             self.db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            dimension = 384  # sesuai HuggingFace MiniLM-L6-v2
+            dimension = 384  # Vector dimension for MiniLM-L6-v2 model
 
+            # Create table for document embeddings if it doesn't exist
             create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS document_embeddings (
                 id SERIAL PRIMARY KEY,
@@ -53,9 +57,11 @@ class VectorStore:
     async def add_document(self, content: str, metadata: Dict[str, Any]):
         """Add a document to the vector store"""
         try:
+            # Generate embedding vector for the content
             embedding = await self._get_embedding(content)
-            embedding_str = ','.join(map(str, embedding.tolist()))  # pgvector cast friendly
+            embedding_str = ','.join(map(str, embedding.tolist()))  # Format for pgvector
 
+            # Insert record into database
             insert_sql = text("""
                 INSERT INTO document_embeddings (document_id, fund_id, content, embedding, metadata)
                 VALUES (:document_id, :fund_id, :content, :embedding::vector, :metadata::jsonb)
@@ -81,9 +87,11 @@ class VectorStore:
     ) -> List[Dict[str, Any]]:
         """Search for similar documents"""
         try:
+            # Create query embedding
             query_embedding = await self._get_embedding(query)
             embedding_pg = f"ARRAY[{','.join(map(str, query_embedding.tolist()))}]::vector"
 
+            # Build optional metadata filter (fund_id, document_id)
             where_clause = ""
             params = {"k": k}
 
@@ -97,7 +105,7 @@ class VectorStore:
                 if conditions:
                     where_clause = "WHERE " + " AND ".join(conditions)
 
-            # embedding inserted langsung sebagai literal
+            # Query pgvector with cosine similarity
             search_sql = text(f"""
                 SELECT 
                     id,
@@ -115,6 +123,7 @@ class VectorStore:
             result = self.db.execute(search_sql, params)
             rows = result.fetchall()
 
+            # Convert DB rows to Python dicts
             return [
                 {
                     "id": row.id,
@@ -134,8 +143,10 @@ class VectorStore:
         """Clear vector store"""
         try:
             if fund_id:
+                # Delete embeddings only for the given fund
                 self.db.execute(text("DELETE FROM document_embeddings WHERE fund_id = :fund_id"), {"fund_id": fund_id})
             else:
+                # Delete all embeddings
                 self.db.execute(text("DELETE FROM document_embeddings"))
             self.db.commit()
         except Exception as e:

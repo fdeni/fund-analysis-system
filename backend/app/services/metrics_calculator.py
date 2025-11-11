@@ -11,13 +11,13 @@ from app.models.transaction import CapitalCall, Distribution, Adjustment
 
 
 class MetricsCalculator:
-    """Calculate fund performance metrics"""
+    """Calculate fund performance metrics such as PIC, DPI, IRR, NAV, RVPI, and TVPI."""
     
     def __init__(self, db: Session):
         self.db = db
     
     def calculate_all_metrics(self, fund_id: int) -> Dict[str, Any]:
-        """Calculate all metrics for a fund"""
+        """Compute all key performance metrics for a given fund."""
         pic = self.calculate_pic(fund_id)
         total_distributions = self.calculate_total_distributions(fund_id)
         dpi = self.calculate_dpi(fund_id)
@@ -31,9 +31,9 @@ class MetricsCalculator:
             "total_distributions": float(total_distributions) if total_distributions else 0,
             "dpi": float(dpi) if dpi else 0,
             "irr": float(irr) if irr else 0,
-            "tvpi": float(nav) if nav else 0,
+            "nav": float(nav) if nav else 0,
             "rvpi": float(rvpi) if rvpi else 0,
-            "nav": float(tvpi) if tvpi else 0,
+            "tvpi": float(tvpi) if tvpi else 0,
         }
     
     def calculate_pic(self, fund_id: int) -> Optional[Decimal]:
@@ -55,17 +55,23 @@ class MetricsCalculator:
             Adjustment.fund_id == fund_id
         ).scalar() or Decimal(0)
         
+        # Compute PIC as total calls minus adjustments
         pic = total_calls - total_adjustments
         return pic if pic > 0 else Decimal(0)
     
     def calculate_total_distributions(self, fund_id: int) -> Optional[Decimal]:
-        """Calculate total distributions"""
+        """
+        Calculate the total amount of distributions for a given fund.
+        Returns the sum of all distribution amounts or 0 if none exist.
+        """
+        # Sum all distribution amounts for the specified fund
         total = self.db.query(
             func.sum(Distribution.amount)
         ).filter(
             Distribution.fund_id == fund_id
         ).scalar() or Decimal(0)
         
+        # Return total distributions as Decimal
         return total
     
     def calculate_dpi(self, fund_id: int) -> Optional[float]:
@@ -73,12 +79,16 @@ class MetricsCalculator:
         Calculate DPI (Distribution to Paid-In)
         DPI = Cumulative Distributions / PIC
         """
+        # Get total paid-in capital
         pic = self.calculate_pic(fund_id)
+        # Get total distributions
         total_distributions = self.calculate_total_distributions(fund_id)
         
+        # Avoid division by zero
         if not pic or pic == 0:
             return 0.0
         
+        # Calculate DPI ratio and round to 4 decimal places
         dpi = float(total_distributions) / float(pic)
         return round(dpi, 4)
     
@@ -117,13 +127,16 @@ class MetricsCalculator:
         For simplicity, we use any Adjustment entries tagged as 'NAV_ADJUSTMENT'.
         """
         try:
+            # Sum all adjustment amounts labeled as 'NAV_ADJUSTMENT' for the given fund
             nav_value = self.db.query(func.sum(Adjustment.amount)).filter(
                 Adjustment.fund_id == fund_id,
                 Adjustment.adjustment_type == "NAV_ADJUSTMENT"
             ).scalar() or Decimal(0)
             
+            # Return NAV as a float value
             return float(nav_value)
         except Exception as e:
+            # Log or print any unexpected database or conversion errors
             print(f"Error calculating NAV: {e}")
             return None
 
@@ -135,15 +148,20 @@ class MetricsCalculator:
         Shows the unrealized value remaining in the portfolio.
         """
         try:
+            # Get current Net Asset Value (NAV)
             nav = self.calculate_nav(fund_id)
+            # Get total Paid-In Capital (PIC)
             pic = self.calculate_pic(fund_id)
             
+            # Avoid division by zero
             if not pic or pic == 0:
                 return 0.0
             
+            # Calculate RVPI ratio and round to 4 decimal places
             rvpi = float(nav) / float(pic)
             return round(rvpi, 4)
         except Exception as e:
+            # Log or print any unexpected or conversion errors
             print(f"Error calculating RVPI: {e}")
             return None
 
@@ -155,16 +173,22 @@ class MetricsCalculator:
         Combines realized and unrealized gains to show total fund performance.
         """
         try:
+            # Get total realized distributions
             total_distributions = self.calculate_total_distributions(fund_id)
+            # Get current unrealized Net Asset Value (NAV)
             nav = self.calculate_nav(fund_id)
+            # Get total Paid-In Capital (PIC)
             pic = self.calculate_pic(fund_id)
 
+            # Avoid division by zero
             if not pic or pic == 0:
                 return 0.0
             
+            # Calculate TVPI ratio and round to 4 decimal places
             tvpi = (float(total_distributions) + float(nav)) / float(pic)
             return round(tvpi, 4)
         except Exception as e:
+            # Log or print any errors during calculation
             print(f"Error calculating TVPI: {e}")
             return None
 
@@ -226,12 +250,13 @@ class MetricsCalculator:
         Returns:
             Detailed breakdown with intermediate values and transaction details
         """
+        # DPI (Distribution to Paid-In) Breakdown
         if metric == "dpi":
             pic = self.calculate_pic(fund_id)
             total_distributions = self.calculate_total_distributions(fund_id)
             dpi = self.calculate_dpi(fund_id)
             
-            # Get detailed transactions for debugging
+            # Fetch related transactions for transparency
             capital_calls = self.db.query(CapitalCall).filter(
                 CapitalCall.fund_id == fund_id
             ).order_by(CapitalCall.call_date).all()
@@ -244,6 +269,7 @@ class MetricsCalculator:
                 Adjustment.fund_id == fund_id
             ).order_by(Adjustment.adjustment_date).all()
             
+            # Return full breakdown with values and transactions
             return {
                 "metric": "DPI",
                 "formula": "Cumulative Distributions / Paid-In Capital",
@@ -278,10 +304,14 @@ class MetricsCalculator:
                 }
             }
         
+        # Handle IRR (Internal Rate of Return)
         elif metric == "irr":
+            # Retrieve all inflows and outflows
             cash_flows = self._get_cash_flows(fund_id)
+            # Compute IRR
             irr = self.calculate_irr(fund_id)
             
+            # Return detailed IRR breakdown
             return {
                 "metric": "IRR",
                 "formula": "Internal Rate of Return (NPV = 0)",
@@ -295,6 +325,7 @@ class MetricsCalculator:
                 }
             }
         
+        # Handle PIC (Paid-In Capital)
         elif metric == "pic":
             # Get detailed capital calls
             capital_calls = self.db.query(CapitalCall).filter(
@@ -310,6 +341,7 @@ class MetricsCalculator:
             total_adjustments = sum(float(adj.amount) for adj in adjustments)
             pic = self.calculate_pic(fund_id)
             
+            # Return full PIC breakdown
             return {
                 "metric": "PIC",
                 "formula": "Total Capital Calls - Adjustments",

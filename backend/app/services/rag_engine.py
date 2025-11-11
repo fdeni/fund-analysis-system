@@ -45,8 +45,11 @@ class RAGEngine:
         metadata = metadata or {}
         metadata["document_id"] = document_id
         metadata["fund_id"] = fund_id
-
+        
+        # Split document into smaller chunks
         chunks = self.chunk_text(content)
+        
+        # Create async embedding tasks for each chunk
         tasks = []
         for chunk in chunks:
             tasks.append(self.vector_store.add_document(chunk, metadata))
@@ -64,7 +67,10 @@ class RAGEngine:
         """
         Build a prompt for the LLM using retrieved context
         """
+        # Combine context chunks into one string
         context_text = "\n\n".join([f"Context {i+1}:\n{chunk['content']}" for i, chunk in enumerate(context_chunks)])
+        
+        # Construct the final LLM prompt
         prompt = (
             "You are an expert financial assistant.\n"
             "Use the context below to answer the user's question accurately.\n"
@@ -79,7 +85,10 @@ class RAGEngine:
         """
         Main method: retrieve context + generate LLM response
         """
+        # Get top-k relevant context chunks
         context_chunks = await self.retrieve_context(query, fund_id=fund_id, top_k=top_k)
+        
+        # Build LLM prompt with context
         prompt = self.build_prompt(query, context_chunks)
 
         # Use Ollama LLM to get answer
@@ -87,6 +96,7 @@ class RAGEngine:
         llm = Ollama(model=settings.OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL)
         response = await llm.agenerate([prompt])
 
+        # Return structured response
         return {
             "query": query,
             "answer": response.generations[0][0].text,
@@ -98,6 +108,8 @@ class RAGEngine:
         Add multiple documents to the RAG engine at once
         Each document should be a dict: {"document_id": int, "fund_id": int, "content": str, "metadata": dict}
         """
+        
+        # Create async tasks for each document
         tasks = []
         for doc in documents:
             tasks.append(self.add_document(
@@ -106,4 +118,4 @@ class RAGEngine:
                 content=doc["content"],
                 metadata=doc.get("metadata")
             ))
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks) # Run all upload tasks concurrently

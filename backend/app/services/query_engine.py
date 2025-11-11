@@ -13,15 +13,16 @@ from sqlalchemy.orm import Session
 
 
 class QueryEngine:
-    """RAG-based query engine for fund analysis"""
+    """Handles fund analysis queries using RAG (Retrieval-Augmented Generation)."""
     
     def __init__(self, db: Session):
         self.db = db
-        self.vector_store = VectorStore()
-        self.metrics_calculator = MetricsCalculator(db)
-        self.llm = self._initialize_llm()
+        self.vector_store = VectorStore() # Handles document search
+        self.metrics_calculator = MetricsCalculator(db) # Calculates fund metrics
+        self.llm = self._initialize_llm() # Initialize LLM model
     
     def _initialize_llm(self):
+        """Initialize Ollama LLM client."""
         return Ollama(
             base_url=settings.OLLAMA_BASE_URL or "http://localhost:11434",
             model=settings.OLLAMA_MODEL or "llama3.2",
@@ -47,10 +48,10 @@ class QueryEngine:
         """
         start_time = time.time()
         
-        # Step 1: Classify query intent
+        # Classify query intent
         intent = await self._classify_intent(query)
         
-        # Step 2: Retrieve relevant context from vector store
+        # Retrieve relevant context from vector store
         filter_metadata = {"fund_id": fund_id} if fund_id else None
         relevant_docs = await self.vector_store.similarity_search(
             query=query,
@@ -58,12 +59,12 @@ class QueryEngine:
             filter_metadata=filter_metadata
         )
         
-        # Step 3: Calculate metrics if needed
+        # Calculate metrics if needed
         metrics = None
         if intent == "calculation" and fund_id:
             metrics = self.metrics_calculator.calculate_all_metrics(fund_id)
         
-        # Step 4: Generate response using LLM
+        # Generate response using LLM
         answer = await self._generate_response(
             query=query,
             context=relevant_docs,
@@ -194,6 +195,7 @@ Please provide a helpful answer based on the context and metrics provided.""")
         )
         
         try:
+            # Call LLM
             response = self.llm.invoke(messages)
             if hasattr(response, 'content'):
                 return response.content

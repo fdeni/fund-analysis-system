@@ -19,7 +19,9 @@ class TableParser:
         """
         cleaned = []
         for row in table:
+            # Remove extra spaces in each cell
             cleaned_row = [cell.strip() if isinstance(cell, str) else cell for cell in row]
+            # Keep row if it has any non-empty cell
             if any(cleaned_row):
                 cleaned.append(cleaned_row)
         return cleaned
@@ -35,12 +37,14 @@ class TableParser:
                 if isinstance(cell, str):
                     # Convert numbers
                     try:
+                        # convert numeric strings to float
                         row[i] = float(cell.replace(",", ""))
                         continue
                     except:
                         pass
                     # Convert dates
                     try:
+                        # parse date strings
                         row[i] = datetime.strptime(cell, "%d/%m/%Y").date()
                     except:
                         pass
@@ -50,7 +54,11 @@ class TableParser:
         """
         Classify table type based on keywords
         """
+        
+        # Combine all text from the table into one string
         flat_text = " ".join(str(cell) for row in table for cell in row).lower()
+        
+        # Simple keyword-based classification
         if "capital call" in flat_text:
             return "capital_call"
         elif "distribution" in flat_text:

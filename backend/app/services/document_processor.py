@@ -10,13 +10,17 @@ logger = logging.getLogger(__name__)
 
 # Parsers with Error Handling
 def parse_fund_info(text: str) -> Dict:
-    """Parse fund information with fallback values"""
+    """
+    Parse fund information (name, GP, and vintage year) from text.
+    Returns a dict with fallback default values if fields are missing.
+    """
     fund_info = {
         'name': 'Unknown Fund',
         'gp_name': 'Unknown GP',
         'vintage_year': None
     }
     
+    # find fund name
     try:
         name_match = re.search(r"Fund Name:\s*(.+)", text, re.IGNORECASE)
         if name_match:
@@ -24,6 +28,7 @@ def parse_fund_info(text: str) -> Dict:
     except Exception as e:
         logger.warning(f"Failed to parse fund name: {e}")
     
+    # find GP name
     try:
         gp_match = re.search(r"GP:\s*(.+)", text, re.IGNORECASE)
         if gp_match:
@@ -31,6 +36,7 @@ def parse_fund_info(text: str) -> Dict:
     except Exception as e:
         logger.warning(f"Failed to parse GP: {e}")
     
+    # find vintage year (4 digits)
     try:
         year_match = re.search(r"Vintage Year:\s*(\d{4})", text, re.IGNORECASE)
         if year_match:
@@ -38,10 +44,14 @@ def parse_fund_info(text: str) -> Dict:
     except Exception as e:
         logger.warning(f"Failed to parse vintage year: {e}")
     
+    # return parsed fund info
     return fund_info
 
 def parse_date(date_str: str) -> Optional[datetime]:
-    """Try multiple date formats"""
+    """
+    Parse a date string using multiple common formats.
+    Returns a datetime object if successful, otherwise None.
+    """
     date_formats = [
         "%Y-%m-%d",
         "%m/%d/%Y",
@@ -51,12 +61,15 @@ def parse_date(date_str: str) -> Optional[datetime]:
         "%Y/%m/%d"
     ]
     
+    # try parsing with the current format
     for fmt in date_formats:
         try:
             return datetime.strptime(date_str.strip(), fmt)
         except ValueError:
+            # if fails, continue to next format
             continue
     
+    # log warning if no format matched
     logger.warning(f"Could not parse date: {date_str}")
     return None
 
@@ -118,15 +131,21 @@ def parse_table_generic(text: str, section_name: str) -> List[List[str]]:
     return rows
 
 def parse_capital_calls(text: str) -> List[Dict]:
-    """Parse capital calls - handles inline format"""
+    """
+    Parse the 'Capital Calls' section from PDF text.
+    Extracts each capital call entry including date, call number, amount, and description.
+    Returns a list of dictionaries with parsed data.
+    """
     # Look for Capital Calls section
     pattern = r'Capital Calls\s+Date Call Number Amount Description\s+(.*?)(?=Distributions|Adjustments|Performance Summary|\Z)'
     match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
     
+    # If section not found, log warning and return empty list
     if not match:
         logger.warning("Could not find Capital Calls section")
         return []
     
+    # Extract content of the Capital Calls section
     content = match.group(1).strip()
     logger.info(f"Capital Calls content: {content[:300]}")
     
@@ -135,8 +154,10 @@ def parse_capital_calls(text: str) -> List[Dict]:
     # Pattern: YYYY-MM-DD Call X $X,XXX,XXX Description text
     call_pattern = r'(\d{4}-\d{2}-\d{2})\s+(Call\s+\d+)\s+\$?([\d,]+)\s+(.+?)(?=\d{4}-\d{2}-\d{2}|\Z)'
     
+    # Find all matches in the content
     matches = re.finditer(call_pattern, content, re.DOTALL)
     
+    # Loop through each match and extract data fields
     for match in matches:
         try:
             call_date = parse_date(match.group(1))
@@ -144,6 +165,7 @@ def parse_capital_calls(text: str) -> List[Dict]:
             amount = parse_amount(match.group(3))
             description = match.group(4).strip()
             
+            # Add to result if date and amount are valid
             if call_date and amount:
                 result.append({
                     "call_date": call_date,
@@ -158,15 +180,21 @@ def parse_capital_calls(text: str) -> List[Dict]:
     return result
 
 def parse_distributions(text: str) -> List[Dict]:
-    """Parse distributions - handles inline format"""
+    """
+    Parse the 'Distributions' section from PDF text.
+    Extracts each distribution entry including date, type, amount, recallable flag, and description.
+    Returns a list of dictionaries with parsed data.
+    """
     # Look for Distributions section
     pattern = r'Distributions\s+Date Type Amount Recallable Description\s+(.*?)(?=Adjustments|Performance Summary|\Z)'
     match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
     
+    # If section not found, log warning and return empty list
     if not match:
         logger.warning("Could not find Distributions section")
         return []
     
+    # Extract content of the section
     content = match.group(1).strip()
     logger.info(f"Distributions content: {content[:300]}")
     
@@ -175,8 +203,10 @@ def parse_distributions(text: str) -> List[Dict]:
     # Pattern: YYYY-MM-DD Type $X,XXX,XXX Yes/No Description
     dist_pattern = r'(\d{4}-\d{2}-\d{2})\s+([\w\s]+?)\s+\$?([\d,]+)\s+(Yes|No)\s+(.+?)(?=\d{4}-\d{2}-\d{2}|\Z)'
     
+    # Find all matching distribution entries
     matches = re.finditer(dist_pattern, content, re.DOTALL | re.IGNORECASE)
     
+    # Loop through each match and parse fields
     for match in matches:
         try:
             dist_date = parse_date(match.group(1))
@@ -185,6 +215,7 @@ def parse_distributions(text: str) -> List[Dict]:
             is_recallable = match.group(4).strip().lower() == 'yes'
             description = match.group(5).strip()
             
+            # Add to results if date and amount are valid
             if dist_date and amount:
                 result.append({
                     "distribution_date": dist_date,
@@ -195,20 +226,27 @@ def parse_distributions(text: str) -> List[Dict]:
                 })
                 logger.info(f"Parsed distribution: date={dist_date.date()}, type={dist_type}, amount={amount}")
         except Exception as e:
+            # Log any parsing failure for a specific entry
             logger.warning(f"Failed to parse distribution: {e}")
     
     return result
 
 def parse_adjustments(text: str) -> List[Dict]:
-    """Parse adjustments - handles inline format"""
+    """
+    Parse the 'Adjustments' section from PDF text.
+    Extracts each adjustment entry including date, type, amount (can be negative), and description.
+    Returns a list of dictionaries with parsed data.
+    """
     # Look for Adjustments section
     pattern = r'Adjustments\s+Date Type Amount Description\s+(.*?)(?=Performance Summary|Fund Strategy|\Z)'
     match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
     
+    # If section not found, log warning and return empty list
     if not match:
         logger.warning("Could not find Adjustments section")
         return []
     
+    # Extract section content
     content = match.group(1).strip()
     logger.info(f"Adjustments content: {content[:300]}")
     
@@ -217,8 +255,10 @@ def parse_adjustments(text: str) -> List[Dict]:
     # Pattern: YYYY-MM-DD Type $X,XXX,XXX or -$X,XXX,XXX Description
     adj_pattern = r'(\d{4}-\d{2}-\d{2})\s+([\w\s]+?)\s+(-?\$?[\d,]+)\s+(.+?)(?=\d{4}-\d{2}-\d{2}|\Z)'
     
+    # Find all matches for adjustments
     matches = re.finditer(adj_pattern, content, re.DOTALL | re.IGNORECASE)
     
+    # Loop through each match and extract data fields
     for match in matches:
         try:
             adj_date = parse_date(match.group(1))
@@ -226,7 +266,8 @@ def parse_adjustments(text: str) -> List[Dict]:
             amount = parse_amount(match.group(3))
             description = match.group(4).strip()
             
-            if adj_date and amount is not None:  # amount can be negative
+            # Add to results if valid date and amount found
+            if adj_date and amount is not None: 
                 result.append({
                     "adjustment_date": adj_date,
                     "adjustment_type": adj_type,
@@ -241,19 +282,39 @@ def parse_adjustments(text: str) -> List[Dict]:
 
 # Text Chunking
 def chunk_text(text: str, chunk_size: int = 500) -> List[str]:
+    """
+    Split long text into smaller chunks based on a given number of words.
+    
+    Args:
+        text (str): The input text to be divided.
+        chunk_size (int): Number of words per chunk. Default is 500.
+    
+    Returns:
+        List[str]: List of text chunks.
+    """
     words = text.split()
     chunks = []
+    # Loop through words and group them into chunks of defined size
     for i in range(0, len(words), chunk_size):
         chunks.append(" ".join(words[i:i + chunk_size]))
+    # Return list of text chunks
     return chunks
 
 # Document Processor
 class DocumentProcessor:
+    """
+    Handles end-to-end processing of uploaded PDF documents:
+    - Extracts text from PDFs
+    - Generates embeddings for text chunks
+    - Parses and stores fund-related data (fund info, capital calls, distributions, adjustments)
+    - Updates or creates fund records in the database
+    """
     def __init__(self, db: Session, embedding_func):
-        self.db = db
-        self.embedding_func = embedding_func
+        self.db = db # Database session
+        self.embedding_func = embedding_func # Function to generate text embeddings
 
     async def process_document(self, file_path: str, document_id: int, fund_id: int):
+        """Extract text, parse fund data, and save structured info + embeddings"""
         try:
             # Extract text
             with pdfplumber.open(file_path) as pdf:
@@ -288,12 +349,14 @@ class DocumentProcessor:
             fund_info = parse_fund_info(pdf_text)
             logger.info(f"Parsed fund info: {fund_info}")
             
+            # Check if fund already exists
             fund_check = self.db.execute(
                 sql_text("SELECT id FROM funds WHERE id=:fund_id"),
                 {"fund_id": fund_id}
             ).fetchone()
             
             if fund_check:
+                # Update existing fund record
                 self.db.execute(
                     sql_text("""
                         UPDATE funds
@@ -308,6 +371,7 @@ class DocumentProcessor:
                     }
                 )
             else:
+                # Insert new fund record
                 result = self.db.execute(
                     sql_text("""
                         INSERT INTO funds (name, gp_name, vintage_year, fund_type, created_at)
@@ -324,6 +388,7 @@ class DocumentProcessor:
                 fund_id = result.fetchone()[0]
                 logger.info(f"Created new fund with ID: {fund_id}")
                 
+                # Update document with fund_id
                 self.db.execute(
                     sql_text("UPDATE documents SET fund_id=:fund_id WHERE id=:doc_id"),
                     {"fund_id": fund_id, "doc_id": document_id}
@@ -390,8 +455,10 @@ class DocumentProcessor:
                     }
                 )
 
+            # Commit all inserts
             self.db.commit()
             
+            # Build summary result
             summary = {
                 "status": "success",
                 "document_id": document_id,
@@ -406,6 +473,7 @@ class DocumentProcessor:
             return summary
 
         except Exception as e:
+            # Rollback on any failure
             self.db.rollback()
             logger.error(f"Document processing failed: {e}", exc_info=True)
             return {"status": "failed", "document_id": document_id, "error": str(e)}
