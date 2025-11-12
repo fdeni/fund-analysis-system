@@ -375,7 +375,7 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 ---
 
 ## Known Limitations
-1. Parsing accuracy may drop for PDFs with complex table layouts or scanned images
+1. Parsing accuracy may drop for PDFs with complex table layouts
 2. IRR calculations assume accurate date ordering of cash flows
 3. Ollama local inference may be slower on lower-end machines
 4. RAG responses depend on embedding quality
@@ -391,6 +391,7 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 4. Cloud deployment (Render, AWS, or GCP)
 5. User authentication and multi-LP support
 6. More robust parsing for scanned PDFs (OCR integration)
+7. Unit test coverage
 
 ---
 
@@ -406,28 +407,6 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 3. Fund Dashboard
 
 ![alt text](image-1.png)
-
----
-
-## Implementation Guidelines
-
-### Document Parsing Strategy
-1. Use **Docling** to extract document structure
-2. Identify tables by headers (e.g., "Capital Call", "Distribution")
-3. Parse table rows and map to SQL schema
-4. Extract text paragraphs for vector storage
-5. Handle parsing errors gracefully
-
-### RAG Pipeline
-1. **Retrieval**: Vector similarity search (top-k=5)
-2. **Augmentation**: Combine retrieved context with SQL data
-3. **Generation**: LLM generates answer with citations
-
-### Calculation Logic
-- Always validate input data before calculation
-- Handle edge cases (zero PIC, missing data)
-- Return calculation breakdown for transparency
-- Cache results for performance
 
 ---
 
@@ -467,7 +446,7 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 - **ORM**: SQLAlchemy
 - **LLM Framework**: LangChain
 - **LLM**: Ollama 3.2
-- **Embeddings**: OpenAI text-embedding-3-small
+- **Embeddings**: sentence-transformers/all-MiniLM-L6-v2
 - **Task Queue**: Celery + Redis
 
 ### Frontend
@@ -616,5 +595,3 @@ This creates `Sample_Fund_Performance_Report.pdf` with:
 - **PE Metrics**: https://www.investopedia.com/terms/d/dpi.asp
 
 ---
-
-**Author**: fdeni
